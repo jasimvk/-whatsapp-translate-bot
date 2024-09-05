@@ -1,12 +1,15 @@
 const express = require('express');
 const { MessagingResponse } = require('twilio').twiml;
 const axios = require('axios');
+require('dotenv').config();
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 
 const GOOGLE_TRANSLATE_API_URL = 'https://translation.googleapis.com/language/translate/v2';
 const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;  // Replace with your Google API key
+console.log(GOOGLE_API_KEY);
+
 
 app.post('/whatsapp', async (req, res) => {
     const incomingMsg = req.body.Body.trim();
