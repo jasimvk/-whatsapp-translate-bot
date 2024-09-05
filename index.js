@@ -10,35 +10,37 @@ const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;  // Replace with yo
 
 app.post('/whatsapp', async (req, res) => {
     const incomingMsg = req.body.Body.trim();
+    console.log('Received message:', incomingMsg);
 
-    // Translate the message from English to Malayalam
     try {
         const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
             params: {
                 q: incomingMsg,
-                source: 'en',
                 target: 'ml',
                 key: GOOGLE_API_KEY
             }
         });
+
         const translatedText = response.data.data.translations[0].translatedText;
+        console.log('Translated text:', translatedText);
 
         const twiml = new MessagingResponse();
         twiml.message(translatedText);
 
-        res.writeHead(200, { 'Content-Type': 'text/xml' });
-        res.end(twiml.toString());
+        res.set('Content-Type', 'text/xml');
+        res.send(twiml.toString());
     } catch (error) {
-        console.error('Translation error:', error);
+        console.error('Error translating text:', error);
+
         const twiml = new MessagingResponse();
         twiml.message('Sorry, I couldn\'t process this message.');
 
-        res.writeHead(200, { 'Content-Type': 'text/xml' });
-        res.end(twiml.toString());
+        res.set('Content-Type', 'text/xml');
+        res.send(twiml.toString());
     }
 });
 
-// Listen on port 3000
-app.listen(3000, () => {
-    console.log('Server is listening on port 3000');
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
 });
