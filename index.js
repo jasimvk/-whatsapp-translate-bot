@@ -6,7 +6,7 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 
 const GOOGLE_TRANSLATE_API_URL = 'https://translation.googleapis.com/language/translate/v2';
-const GOOGLE_API_KEY = 'YOUR_GOOGLE_API_KEY';  // Replace with your Google API key
+const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;  // Replace with your Google API key
 
 app.post('/whatsapp', async (req, res) => {
     const incomingMsg = req.body.Body.trim();
