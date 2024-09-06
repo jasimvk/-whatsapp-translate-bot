@@ -11,10 +11,9 @@ const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;  // Replace with yo
 
 const languageOptions = {
     '1': 'en',  // English
-    '2': 'hi',  // Hindi
-    '3': 'ta',  // Tamil
-    '4': 'te',  // Telugu
-    '5': 'kn'   // Kannada
+    '2': 'ar',  // Arabic
+    '3': 'hi',  // Hindi
+ 
 };
 
 const userStates = {};
@@ -45,7 +44,12 @@ app.post('/whatsapp', async (req, res) => {
             const translatedText = response.data.data.translations[0].translatedText;
             console.log('Translated text:', translatedText);
 
-            twiml.message(`${translatedText}\n\nChoose another language:\n1. English\n2. Hindi\n3. Tamil\n4. Telugu\n5. Kannada\n\nOr send any message to translate to Malayalam again.`);
+            // First message: Translation
+            twiml.message(translatedText);
+
+            // Second message: Language options
+            twiml.message('Choose another language:\n1. English\n2. Arabic\n3. Hindi\n\nOr send any message to translate to Malayalam again.');
+            
             userStates[fromNumber].step = 'choose_language';
             userStates[fromNumber].originalText = incomingMsg;
         } else if (userStates[fromNumber].step === 'choose_language') {
@@ -62,7 +66,11 @@ app.post('/whatsapp', async (req, res) => {
                 const translatedText = response.data.data.translations[0].translatedText;
                 console.log('Translated text:', translatedText);
 
-                twiml.message(`${translatedText}\n\nSend any message to translate to Malayalam.`);
+                // First message: Translation
+                twiml.message(translatedText);
+
+                // Second message: Instruction
+                twiml.message('Send any message to translate to Malayalam.');
             } else {
                 twiml.message('Invalid option. Send any message to translate to Malayalam.');
             }
