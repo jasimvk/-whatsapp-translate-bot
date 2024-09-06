@@ -41,9 +41,9 @@ app.post('/whatsapp', async (req, res) => {
             console.log('Response:', response.data);
 
             const translatedText = response.data.data.translations[0].translatedText;
-            console.log('Translated text:', translatedText);
+            console.log('Translated text (Malayalam):', translatedText);
 
-            // First message: Translation
+            // First message: Malayalam translation
             twiml.message(translatedText);
 
             // Second message: Language options
@@ -63,14 +63,10 @@ app.post('/whatsapp', async (req, res) => {
                 console.log('Response:', response.data);
 
                 const translatedText = response.data.data.translations[0].translatedText;
-                console.log('Translated text:', translatedText);
+                console.log(`Translated text (${languageOptions[incomingMsg]}):`, translatedText);
 
-                // First message: Translation
-                // Send the translated text as is, without any encoding
+                // First message: Translation in chosen language
                 twiml.message(translatedText);
-
-                // Log the exact message being sent
-                console.log('Sending translated message:', translatedText);
 
                 // Second message: Instruction
                 twiml.message('Send any message to translate to Malayalam.');
