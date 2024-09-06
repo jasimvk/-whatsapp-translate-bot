@@ -1,94 +1,70 @@
 const express = require('express');
 const { MessagingResponse } = require('twilio').twiml;
 const axios = require('axios');
+const multer = require('multer');
+const { createWorker } = require('tesseract.js');
 require('dotenv').config();
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 
+const upload = multer({ dest: 'uploads/' });
+
 const GOOGLE_TRANSLATE_API_URL = 'https://translation.googleapis.com/language/translate/v2';
-const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;  // Replace with your Google API key
+const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
 
-const languageOptions = {
-    '1': 'en',  // English
-    '2': 'ar',  // Arabic
-    '3': 'hi',  // Hindi
-};
+async function performOCR(imagePath) {
+  const worker = await createWorker('ara');
+  const { data: { text } } = await worker.recognize(imagePath);
+  await worker.terminate();
+  return text;
+}
 
-const userStates = {};
-
-app.post('/whatsapp', async (req, res) => {
-    console.log('Received request:', req.body);
-    const incomingMsg = req.body.Body.trim();
-    const fromNumber = req.body.From;
-    console.log('Received message:', incomingMsg, 'from:', fromNumber);
-
-    const twiml = new MessagingResponse();
-
-    if (!userStates[fromNumber]) {
-        userStates[fromNumber] = { step: 'translate' };
+async function translateText(text, targetLanguage) {
+  const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
+    params: {
+      q: text,
+      target: targetLanguage,
+      key: GOOGLE_API_KEY
     }
+  });
+  return response.data.data.translations[0].translatedText;
+}
 
-    try {
-        if (userStates[fromNumber].step === 'translate') {
-            const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
-                params: {
-                    q: incomingMsg,
-                    target: 'ml',
-                    key: GOOGLE_API_KEY
-                }
-            });
-            console.log('Response:', response.data);
+app.post('/whatsapp', upload.single('MediaUrl0'), async (req, res) => {
+  const twiml = new MessagingResponse();
 
-            const translatedText = response.data.data.translations[0].translatedText;
-            console.log('Translated text (Malayalam):', translatedText);
+  try {
+    if (req.file) {
+      // Image processing
+      const imageText = await performOCR(req.file.path);
+      console.log('Extracted text:', imageText);
 
-            // First message: Malayalam translation
-            twiml.message(translatedText);
+      if (imageText.trim()) {
+        const translatedText = await translateText(imageText, 'ml');
+        console.log('Translated text:', translatedText);
 
-            // Second message: Language options
-            twiml.message('Choose another language:\n1. English\n2. Arabic\n3. Hindi\n\nOr send any message to translate to Malayalam again.');
-            
-            userStates[fromNumber].step = 'choose_language';
-            userStates[fromNumber].originalText = incomingMsg;
-        } else if (userStates[fromNumber].step === 'choose_language') {
-            if (languageOptions[incomingMsg]) {
-                const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
-                    params: {
-                        q: userStates[fromNumber].originalText,
-                        target: languageOptions[incomingMsg],
-                        key: GOOGLE_API_KEY
-                    }
-                });
-                console.log('Response:', response.data);
-
-                const translatedText = response.data.data.translations[0].translatedText;
-                console.log(`Translated text (${languageOptions[incomingMsg]}):`, translatedText);
-
-                // First message: Translation in chosen language
-                twiml.message(translatedText);
-
-                // Second message: Instruction
-                twiml.message('Send any message to translate to Malayalam.');
-            } else {
-                twiml.message('Invalid option. Send any message to translate to Malayalam.');
-            }
-            userStates[fromNumber].step = 'translate';
-        }
-
-        res.set('Content-Type', 'text/xml');
-        res.send(twiml.toString());
-    } catch (error) {
-        console.error('Error translating text:', error);
-
-        twiml.message('Sorry, I couldn\'t process this message.');
-
-        res.set('Content-Type', 'text/xml');
-        res.send(twiml.toString());
+        twiml.message('Extracted and translated text:');
+        twiml.message(translatedText);
+      } else {
+        twiml.message('No text could be extracted from the image.');
+      }
+    } else {
+      // Text processing (existing functionality)
+      const incomingMsg = req.body.Body.trim();
+      const translatedText = await translateText(incomingMsg, 'ml');
+      twiml.message(translatedText);
     }
+  } catch (error) {
+    console.error('Error processing message:', error);
+    twiml.message('Sorry, I couldn\'t process this message or image.');
+  }
+
+  res.writeHead(200, { 'Content-Type': 'text/xml' });
+  res.end(twiml.toString());
 });
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+  console.log(`Server is running on port ${port}`);
 });
