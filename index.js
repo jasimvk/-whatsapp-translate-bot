@@ -24,6 +24,7 @@ app.post('/whatsapp', async (req, res) => {
                 key: GOOGLE_API_KEY
             }
         });
+        console.log('Response:', response.data);
 
         const translatedText = response.data.data.translations[0].translatedText;
         console.log('Translated text:', translatedText);
