@@ -66,11 +66,11 @@ app.post('/whatsapp', async (req, res) => {
                 console.log('Translated text:', translatedText);
 
                 // First message: Translation
-                // Use Unicode escape sequences for Arabic text
-                const encodedText = languageOptions[incomingMsg] === 'ar' 
-                    ? translatedText.split('').map(char => `&#${char.charCodeAt(0)};`).join('')
-                    : translatedText;
-                twiml.message(encodedText);
+                // Send the translated text as is, without any encoding
+                twiml.message(translatedText);
+
+                // Log the exact message being sent
+                console.log('Sending translated message:', translatedText);
 
                 // Second message: Instruction
                 twiml.message('Send any message to translate to Malayalam.');
