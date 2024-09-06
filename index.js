@@ -12,6 +12,7 @@ const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;  // Replace with yo
 
 
 app.post('/whatsapp', async (req, res) => {
+    console.log('Received request:', req.body);
     const incomingMsg = req.body.Body.trim();
     console.log('Received message:', incomingMsg);
 
@@ -19,7 +20,7 @@ app.post('/whatsapp', async (req, res) => {
         const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
             params: {
                 q: incomingMsg,
-                target: 'ml',
+                target: 'ar',
                 key: GOOGLE_API_KEY
             }
         });
