@@ -13,7 +13,6 @@ const languageOptions = {
     '1': 'en',  // English
     '2': 'ar',  // Arabic
     '3': 'hi',  // Hindi
- 
 };
 
 const userStates = {};
@@ -67,7 +66,11 @@ app.post('/whatsapp', async (req, res) => {
                 console.log('Translated text:', translatedText);
 
                 // First message: Translation
-                twiml.message(translatedText);
+                // Use Unicode escape sequences for Arabic text
+                const encodedText = languageOptions[incomingMsg] === 'ar' 
+                    ? translatedText.split('').map(char => `&#${char.charCodeAt(0)};`).join('')
+                    : translatedText;
+                twiml.message(encodedText);
 
                 // Second message: Instruction
                 twiml.message('Send any message to translate to Malayalam.');
