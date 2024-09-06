@@ -20,7 +20,7 @@ app.post('/whatsapp', async (req, res) => {
         const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
             params: {
                 q: incomingMsg,
-                target: 'ar',
+                target: 'ml',
                 key: GOOGLE_API_KEY
             }
         });
