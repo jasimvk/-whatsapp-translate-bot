@@ -1,7 +1,7 @@
 const express = require('express');
 const { MessagingResponse } = require('twilio').twiml;
 const axios = require('axios');
-const vision = require('@google-cloud/vision');
+const Tesseract = require('tesseract.js');
 require('dotenv').config();
 
 const app = express();
@@ -83,10 +83,13 @@ app.post('/whatsapp', async (req, res) => {
 });
 
 async function extractTextFromImage(imageUrl) {
-    const client = new vision.ImageAnnotatorClient();
-    const [result] = await client.textDetection(imageUrl);
-    const detections = result.textAnnotations;
-    return detections.length > 0 ? detections[0].description : null;
+    try {
+        const { data: { text } } = await Tesseract.recognize(imageUrl, 'eng');
+        return text.trim();
+    } catch (error) {
+        console.error('Error extracting text from image:', error);
+        return null;
+    }
 }
 
 async function translateText(text, targetLanguage) {
