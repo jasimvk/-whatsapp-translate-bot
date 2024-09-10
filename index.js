@@ -24,6 +24,7 @@ app.post('/whatsapp', async (req, res) => {
     const mediaUrl = req.body.MediaUrl0;
     const fromNumber = req.body.From;
     console.log('Received message:', incomingMsg, 'from:', fromNumber);
+    console.log('Media URL:', mediaUrl);
 
     const twiml = new MessagingResponse();
 
@@ -33,25 +34,27 @@ app.post('/whatsapp', async (req, res) => {
 
     try {
         if (mediaUrl) {
-            // Handle image translation
+            console.log('Processing image...');
+            twiml.message('Processing your image. This may take a moment...');
+            
             const extractedText = await extractTextFromImage(mediaUrl);
+            console.log('Extracted text:', extractedText);
+            
             if (extractedText) {
                 const translatedText = await translateText(extractedText, 'ml');
+                console.log('Translated text:', translatedText);
                 twiml.message(`Extracted and translated text:\n${translatedText}`);
                 twiml.message('Choose another language:\n1. English\n2. Arabic\n3. Hindi\n\nOr send any message to translate to Malayalam again.');
                 userStates[fromNumber].step = 'choose_language';
                 userStates[fromNumber].originalText = extractedText;
             } else {
-                twiml.message('No text found in the image.');
+                twiml.message('No text found in the image or there was an error processing it.');
             }
         } else if (userStates[fromNumber].step === 'translate') {
             const translatedText = await translateText(incomingMsg, 'ml');
             console.log('Translated text (Malayalam):', translatedText);
 
-            // First message: Malayalam translation
             twiml.message(translatedText);
-
-            // Second message: Language options
             twiml.message('Choose another language:\n1. English\n2. Arabic\n3. Hindi\n\nOr send any message to translate to Malayalam again.');
             
             userStates[fromNumber].step = 'choose_language';
@@ -61,10 +64,7 @@ app.post('/whatsapp', async (req, res) => {
                 const translatedText = await translateText(userStates[fromNumber].originalText, languageOptions[incomingMsg]);
                 console.log(`Translated text (${languageOptions[incomingMsg]}):`, translatedText);
 
-                // First message: Translation in chosen language
                 twiml.message(translatedText);
-
-                // Second message: Instruction
                 twiml.message('Send any message to translate to Malayalam.');
             } else {
                 twiml.message('Invalid option. Send any message to translate to Malayalam.');
@@ -76,7 +76,7 @@ app.post('/whatsapp', async (req, res) => {
         res.send(twiml.toString());
     } catch (error) {
         console.error('Error processing message:', error);
-        twiml.message('Sorry, I couldn\'t process this message.');
+        twiml.message('Sorry, I encountered an error while processing your message.');
         res.set('Content-Type', 'text/xml');
         res.send(twiml.toString());
     }
@@ -84,7 +84,11 @@ app.post('/whatsapp', async (req, res) => {
 
 async function extractTextFromImage(imageUrl) {
     try {
-        const { data: { text } } = await Tesseract.recognize(imageUrl, 'eng');
+        console.log('Starting OCR process...');
+        const { data: { text } } = await Tesseract.recognize(imageUrl, 'eng', {
+            logger: m => console.log(m)
+        });
+        console.log('OCR process completed.');
         return text.trim();
     } catch (error) {
         console.error('Error extracting text from image:', error);
@@ -93,14 +97,19 @@ async function extractTextFromImage(imageUrl) {
 }
 
 async function translateText(text, targetLanguage) {
-    const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
-        params: {
-            q: text,
-            target: targetLanguage,
-            key: GOOGLE_API_KEY
-        }
-    });
-    return response.data.data.translations[0].translatedText;
+    try {
+        const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
+            params: {
+                q: text,
+                target: targetLanguage,
+                key: GOOGLE_API_KEY
+            }
+        });
+        return response.data.data.translations[0].translatedText;
+    } catch (error) {
+        console.error('Error translating text:', error);
+        throw error;
+    }
 }
 
 const port = process.env.PORT || 3000;
