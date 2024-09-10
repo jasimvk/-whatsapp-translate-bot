@@ -1,13 +1,14 @@
 const express = require('express');
 const { MessagingResponse } = require('twilio').twiml;
 const axios = require('axios');
+const vision = require('@google-cloud/vision');
 require('dotenv').config();
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 
 const GOOGLE_TRANSLATE_API_URL = 'https://translation.googleapis.com/language/translate/v2';
-const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;  // Replace with your Google API key
+const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
 
 const languageOptions = {
     '1': 'en',  // English
@@ -19,7 +20,8 @@ const userStates = {};
 
 app.post('/whatsapp', async (req, res) => {
     console.log('Received request:', req.body);
-    const incomingMsg = req.body.Body.trim();
+    const incomingMsg = req.body.Body ? req.body.Body.trim() : '';
+    const mediaUrl = req.body.MediaUrl0;
     const fromNumber = req.body.From;
     console.log('Received message:', incomingMsg, 'from:', fromNumber);
 
@@ -30,17 +32,20 @@ app.post('/whatsapp', async (req, res) => {
     }
 
     try {
-        if (userStates[fromNumber].step === 'translate') {
-            const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
-                params: {
-                    q: incomingMsg,
-                    target: 'ml',
-                    key: GOOGLE_API_KEY
-                }
-            });
-            console.log('Response:', response.data);
-
-            const translatedText = response.data.data.translations[0].translatedText;
+        if (mediaUrl) {
+            // Handle image translation
+            const extractedText = await extractTextFromImage(mediaUrl);
+            if (extractedText) {
+                const translatedText = await translateText(extractedText, 'ml');
+                twiml.message(`Extracted and translated text:\n${translatedText}`);
+                twiml.message('Choose another language:\n1. English\n2. Arabic\n3. Hindi\n\nOr send any message to translate to Malayalam again.');
+                userStates[fromNumber].step = 'choose_language';
+                userStates[fromNumber].originalText = extractedText;
+            } else {
+                twiml.message('No text found in the image.');
+            }
+        } else if (userStates[fromNumber].step === 'translate') {
+            const translatedText = await translateText(incomingMsg, 'ml');
             console.log('Translated text (Malayalam):', translatedText);
 
             // First message: Malayalam translation
@@ -53,16 +58,7 @@ app.post('/whatsapp', async (req, res) => {
             userStates[fromNumber].originalText = incomingMsg;
         } else if (userStates[fromNumber].step === 'choose_language') {
             if (languageOptions[incomingMsg]) {
-                const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
-                    params: {
-                        q: userStates[fromNumber].originalText,
-                        target: languageOptions[incomingMsg],
-                        key: GOOGLE_API_KEY
-                    }
-                });
-                console.log('Response:', response.data);
-
-                const translatedText = response.data.data.translations[0].translatedText;
+                const translatedText = await translateText(userStates[fromNumber].originalText, languageOptions[incomingMsg]);
                 console.log(`Translated text (${languageOptions[incomingMsg]}):`, translatedText);
 
                 // First message: Translation in chosen language
@@ -79,14 +75,30 @@ app.post('/whatsapp', async (req, res) => {
         res.set('Content-Type', 'text/xml');
         res.send(twiml.toString());
     } catch (error) {
-        console.error('Error translating text:', error);
-
+        console.error('Error processing message:', error);
         twiml.message('Sorry, I couldn\'t process this message.');
-
         res.set('Content-Type', 'text/xml');
         res.send(twiml.toString());
     }
 });
+
+async function extractTextFromImage(imageUrl) {
+    const client = new vision.ImageAnnotatorClient();
+    const [result] = await client.textDetection(imageUrl);
+    const detections = result.textAnnotations;
+    return detections.length > 0 ? detections[0].description : null;
+}
+
+async function translateText(text, targetLanguage) {
+    const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
+        params: {
+            q: text,
+            target: targetLanguage,
+            key: GOOGLE_API_KEY
+        }
+    });
+    return response.data.data.translations[0].translatedText;
+}
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
