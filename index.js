@@ -2,6 +2,8 @@ const express = require('express');
 const { MessagingResponse } = require('twilio').twiml;
 const axios = require('axios');
 const Tesseract = require('tesseract.js');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -82,13 +84,28 @@ app.post('/whatsapp', async (req, res) => {
     }
 });
 
+async function downloadImage(url) {
+    const response = await axios({
+        url,
+        method: 'GET',
+        responseType: 'arraybuffer'
+    });
+    const buffer = Buffer.from(response.data, 'binary');
+    const tempPath = path.join(__dirname, 'temp_image.jpg');
+    fs.writeFileSync(tempPath, buffer);
+    return tempPath;
+}
+
 async function extractTextFromImage(imageUrl) {
     try {
-        console.log('Starting OCR process...');
-        const { data: { text } } = await Tesseract.recognize(imageUrl, 'eng', {
+        console.log('Downloading image...');
+        const imagePath = await downloadImage(imageUrl);
+        console.log('Image downloaded. Starting OCR process...');
+        const { data: { text } } = await Tesseract.recognize(imagePath, 'eng', {
             logger: m => console.log(m)
         });
         console.log('OCR process completed.');
+        fs.unlinkSync(imagePath);  // Delete the temporary image file
         return text.trim();
     } catch (error) {
         console.error('Error extracting text from image:', error);
