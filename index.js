@@ -21,8 +21,7 @@ const languageOptions = {
 const userStates = {};
 
 // Tesseract test
-console.log('Running Tesseract test...');
-Tesseract.recognize('https://tesseract.projectnaptha.com/img/eng_bw.png', 'eng', { logger: m => console.log('Tesseract test:', m) })
+Tesseract.recognize('https://tesseract.projectnaptha.com/img/eng_bw.png', 'eng', { logger: m => console.log(m) })
   .then(({ data: { text } }) => {
     console.log('Tesseract test result:', text);
   })
@@ -42,7 +41,7 @@ app.post('/whatsapp', async (req, res) => {
 
     if (!userStates[fromNumber]) {
         userStates[fromNumber] = { step: 'translate' };
-    }   
+    }
 
     try {
         if (mediaUrl) {
@@ -77,7 +76,7 @@ app.post('/whatsapp', async (req, res) => {
                 console.log(`Translated text (${languageOptions[incomingMsg]}):`, translatedText);
 
                 twiml.message(translatedText);
-                twiml.message('Send a new message to translate to Malayalam.');
+                twiml.message('Send any message to translate to Malayalam.');
             } else {
                 twiml.message('Invalid option. Send any message to translate to Malayalam.');
             }
@@ -90,7 +89,7 @@ app.post('/whatsapp', async (req, res) => {
         console.error('Error processing message:', error);
         if (error.message.includes('network')) {
             twiml.message('Sorry, there was a network error. Please try again later.');
-        } else if (error.message.includes('Tesseract') || error.message.includes('OCR')) {
+        } else if (error.message.includes('Tesseract')) {
             twiml.message('Sorry, there was an error processing the image. Please try a different image or send text instead.');
         } else {
             twiml.message('Sorry, I encountered an error while processing your message. Please try again.');
@@ -102,7 +101,6 @@ app.post('/whatsapp', async (req, res) => {
 
 async function downloadImage(url) {
     try {
-        console.log('Downloading image from URL:', url);
         const response = await axios({
             url,
             method: 'GET',
@@ -129,44 +127,42 @@ function getImageFormat(imagePath) {
 }
 
 async function extractTextFromImage(imageUrl) {
-    let imagePath;
     try {
-        console.log('Downloading image from URL:', imageUrl);
-        imagePath = await downloadImage(imageUrl);
+        console.log('Downloading image...');
+        const imagePath = await downloadImage(imageUrl);
         console.log('Image downloaded. File size:', fs.statSync(imagePath).size, 'bytes');
         const format = getImageFormat(imagePath);
         console.log('Image format:', format);
         if (format === 'unknown') {
-            throw new Error('Unsupported image format');
+            console.error('Unsupported image format');
+            return null;
         }
         console.log('Starting OCR process...');
-        const { data: { text } } = await Promise.race([
-            Tesseract.recognize(imagePath, 'eng', {
-                logger: m => console.log('Tesseract progress:', m)
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('OCR timeout')), 30000))
-        ]);
+        const { data: { text } } = await Tesseract.recognize(imagePath, 'eng', {
+            logger: m => console.log(m)
+        });
         console.log('OCR process completed.');
+        fs.unlinkSync(imagePath);  // Delete the temporary image file
         
         if (!text || text.trim().length === 0) {
-            throw new Error('No text found in the image');
+            console.log('No text found in the image.');
+            return null;
         }
         
         return text.trim();
     } catch (error) {
         console.error('Error extracting text from image:', error);
-        throw error; // Rethrow the error to be caught in the main function
-    } finally {
-        if (imagePath) {
-            fs.unlinkSync(imagePath);  // Delete the temporary image file
-            console.log('Temporary image file deleted');
+        if (error.message.includes('network')) {
+            console.error('Network error: Unable to download the image.');
+        } else if (error.message.includes('Tesseract')) {
+            console.error('Tesseract error: OCR process failed.');
         }
+        return null;
     }
 }
 
 async function translateText(text, targetLanguage) {
     try {
-        console.log(`Translating text to ${targetLanguage}:`, text);
         const response = await axios.post(GOOGLE_TRANSLATE_API_URL, null, {
             params: {
                 q: text,
@@ -174,7 +170,6 @@ async function translateText(text, targetLanguage) {
                 key: GOOGLE_API_KEY
             }
         });
-        console.log('Translation successful');
         return response.data.data.translations[0].translatedText;
     } catch (error) {
         console.error('Error translating text:', error);
@@ -185,8 +180,4 @@ async function translateText(text, targetLanguage) {
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
-    console.log('Environment variables loaded:', {
-        GOOGLE_API_KEY: GOOGLE_API_KEY ? 'Set' : 'Not set',
-        PORT: process.env.PORT || '(using default 3000)'
-    });
 });
