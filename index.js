@@ -20,6 +20,15 @@ const languageOptions = {
 
 const userStates = {};
 
+// Tesseract test
+Tesseract.recognize('https://tesseract.projectnaptha.com/img/eng_bw.png', 'eng', { logger: m => console.log(m) })
+  .then(({ data: { text } }) => {
+    console.log('Tesseract test result:', text);
+  })
+  .catch(error => {
+    console.error('Tesseract test failed:', error);
+  });
+
 app.post('/whatsapp', async (req, res) => {
     console.log('Received request:', req.body);
     const incomingMsg = req.body.Body ? req.body.Body.trim() : '';
@@ -50,7 +59,7 @@ app.post('/whatsapp', async (req, res) => {
                 userStates[fromNumber].step = 'choose_language';
                 userStates[fromNumber].originalText = extractedText;
             } else {
-                twiml.message('No text found in the image or there was an error processing it.');
+                twiml.message('Unable to extract text from the image. Please make sure the image contains clear, readable text and try again.');
             }
         } else if (userStates[fromNumber].step === 'translate') {
             const translatedText = await translateText(incomingMsg, 'ml');
@@ -78,37 +87,76 @@ app.post('/whatsapp', async (req, res) => {
         res.send(twiml.toString());
     } catch (error) {
         console.error('Error processing message:', error);
-        twiml.message('Sorry, I encountered an error while processing your message.');
+        if (error.message.includes('network')) {
+            twiml.message('Sorry, there was a network error. Please try again later.');
+        } else if (error.message.includes('Tesseract')) {
+            twiml.message('Sorry, there was an error processing the image. Please try a different image or send text instead.');
+        } else {
+            twiml.message('Sorry, I encountered an error while processing your message. Please try again.');
+        }
         res.set('Content-Type', 'text/xml');
         res.send(twiml.toString());
     }
 });
 
 async function downloadImage(url) {
-    const response = await axios({
-        url,
-        method: 'GET',
-        responseType: 'arraybuffer'
-    });
-    const buffer = Buffer.from(response.data, 'binary');
-    const tempPath = path.join(__dirname, 'temp_image.jpg');
-    fs.writeFileSync(tempPath, buffer);
-    return tempPath;
+    try {
+        const response = await axios({
+            url,
+            method: 'GET',
+            responseType: 'arraybuffer'
+        });
+        const buffer = Buffer.from(response.data, 'binary');
+        const tempPath = path.join(__dirname, 'temp_image.jpg');
+        fs.writeFileSync(tempPath, buffer);
+        console.log('Image downloaded successfully to:', tempPath);
+        return tempPath;
+    } catch (error) {
+        console.error('Error downloading image:', error.message);
+        throw error;
+    }
+}
+
+function getImageFormat(imagePath) {
+    const ext = path.extname(imagePath).toLowerCase();
+    return ext === '.png' ? 'png' :
+           ext === '.jpg' || ext === '.jpeg' ? 'jpg' :
+           ext === '.gif' ? 'gif' :
+           ext === '.bmp' ? 'bmp' :
+           'unknown';
 }
 
 async function extractTextFromImage(imageUrl) {
     try {
         console.log('Downloading image...');
         const imagePath = await downloadImage(imageUrl);
-        console.log('Image downloaded. Starting OCR process...');
+        console.log('Image downloaded. File size:', fs.statSync(imagePath).size, 'bytes');
+        const format = getImageFormat(imagePath);
+        console.log('Image format:', format);
+        if (format === 'unknown') {
+            console.error('Unsupported image format');
+            return null;
+        }
+        console.log('Starting OCR process...');
         const { data: { text } } = await Tesseract.recognize(imagePath, 'eng', {
             logger: m => console.log(m)
         });
         console.log('OCR process completed.');
         fs.unlinkSync(imagePath);  // Delete the temporary image file
+        
+        if (!text || text.trim().length === 0) {
+            console.log('No text found in the image.');
+            return null;
+        }
+        
         return text.trim();
     } catch (error) {
         console.error('Error extracting text from image:', error);
+        if (error.message.includes('network')) {
+            console.error('Network error: Unable to download the image.');
+        } else if (error.message.includes('Tesseract')) {
+            console.error('Tesseract error: OCR process failed.');
+        }
         return null;
     }
 }
